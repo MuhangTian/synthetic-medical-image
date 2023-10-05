@@ -1,0 +1,57 @@
+# Ignore compiled Python files
+*.pyc
+
+# Ignore Python cache directories
+__pycache__/
+
+# Ignore macOS system files
+.DS_Store
+
+# Ignore editor and IDE files
+.vscode/
+.idea/
+
+# Ignore compiled Java classes
+*.class
+
+# Ignore build directories
+/build/
+/dist/
+
+# Ignore Node.js dependencies
+node_modules/
+
+# Ignore package-lock.json for npm
+package-lock.json
+
+# Ignore yarn.lock for Yarn
+yarn.lock
+
+# Ignore compiled binaries or executables
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Ignore log files
+*.log
+
+# Ignore virtual environment files
+venv/
+env/
+.env
+
+# Ignore operating system generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Ignore backup files
+*~
+*.bak
+
+# NOTE: our file
+try*
+wandb
+data/videos
+data/imgs
