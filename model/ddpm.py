@@ -25,10 +25,8 @@ from ema_pytorch import EMA
 
 from accelerate import Accelerator
 
-from models.denoising_diffusion_pytorch.attend import Attend
-from models.denoising_diffusion_pytorch.fid_evaluation import FIDEvaluation
-
-from models.denoising_diffusion_pytorch.version import __version__
+from model.attend import Attend
+from model.fid_evaluation import FIDEvaluation
 
 # constants
 
@@ -333,13 +331,13 @@ class Unet(nn.Module):
             self.downs.append(nn.ModuleList([
                 block_klass(dim_in, dim_in, time_emb_dim = time_dim),
                 block_klass(dim_in, dim_in, time_emb_dim = time_dim),
-                attn_klass(dim_in, dim_head = attn_dim_head, heads = attn_heads),
+                # attn_klass(dim_in, dim_head = attn_dim_head, heads = attn_heads),     # NOTE: do not do attention
                 Downsample(dim_in, dim_out) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding = 1)
             ]))
 
         mid_dim = dims[-1]
         self.mid_block1 = block_klass(mid_dim, mid_dim, time_emb_dim = time_dim)
-        self.mid_attn = FullAttention(mid_dim)
+        # self.mid_attn = FullAttention(mid_dim)        # NOTE: do not do attention
         self.mid_block2 = block_klass(mid_dim, mid_dim, time_emb_dim = time_dim)
 
         for ind, ((dim_in, dim_out), layer_full_attn) in enumerate(zip(reversed(in_out), reversed(full_attn))):
@@ -350,7 +348,7 @@ class Unet(nn.Module):
             self.ups.append(nn.ModuleList([
                 block_klass(dim_out + dim_in, dim_out, time_emb_dim = time_dim),
                 block_klass(dim_out + dim_in, dim_out, time_emb_dim = time_dim),
-                attn_klass(dim_out, dim_head = attn_dim_head, heads = attn_heads),
+                # attn_klass(dim_out, dim_head = attn_dim_head, heads = attn_heads),        # NOTE: do not do attention
                 Upsample(dim_out, dim_in) if not is_last else  nn.Conv2d(dim_out, dim_in, 3, padding = 1)
             ]))
 
@@ -378,27 +376,29 @@ class Unet(nn.Module):
 
         h = []
 
-        for block1, block2, attn, downsample in self.downs:
+        # for block1, block2, attn, downsample in self.downs:
+        for block1, block2, downsample in self.downs:
             x = block1(x, t)
             h.append(x)
 
             x = block2(x, t)
-            x = attn(x) + x
+            # x = attn(x) + x
             h.append(x)
 
             x = downsample(x)
 
         x = self.mid_block1(x, t)
-        x = self.mid_attn(x) + x
+        # x = self.mid_attn(x) + x
         x = self.mid_block2(x, t)
 
-        for block1, block2, attn, upsample in self.ups:
+        # for block1, block2, attn, upsample in self.ups:
+        for block1, block2, upsample in self.ups:
             x = torch.cat((x, h.pop()), dim = 1)
             x = block1(x, t)
 
             x = torch.cat((x, h.pop()), dim = 1)
             x = block2(x, t)
-            x = attn(x) + x
+            # x = attn(x) + x
 
             x = upsample(x)
 
@@ -506,6 +506,7 @@ class GaussianDiffusion(nn.Module):
 
         assert self.sampling_timesteps <= timesteps
         self.is_ddim_sampling = self.sampling_timesteps < timesteps
+        print(f"whether using DDIM: {self.is_ddim_sampling}")
         self.ddim_sampling_eta = ddim_sampling_eta
 
         # helper function to register buffer from float64 to float32
@@ -858,12 +859,13 @@ class Trainer(object):
         inception_block_idx = 2048,
         max_grad_norm = 1.,
         num_fid_samples = 50000,
-        save_best_and_latest_only = False
+        save_best_and_latest_only = False,
+        wandb = None,
     ):
         super().__init__()
 
         # accelerator
-
+        self.wandb = wandb
         self.accelerator = Accelerator(
             split_batches = split_batches,
             mixed_precision = mixed_precision_type if amp else 'no'
@@ -895,7 +897,7 @@ class Trainer(object):
 
         assert len(self.ds) >= 100, 'you should have at least 100 images in your folder. at least 10k images recommended'
 
-        dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = cpu_count())
+        dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = 1)
 
         dl = self.accelerator.prepare(dl)
         self.dl = cycle(dl)
@@ -963,7 +965,6 @@ class Trainer(object):
             'opt': self.opt.state_dict(),
             'ema': self.ema.state_dict(),
             'scaler': self.accelerator.scaler.state_dict() if exists(self.accelerator.scaler) else None,
-            'version': __version__
         }
 
         torch.save(data, str(self.results_folder / f'model-{milestone}.pt'))
@@ -1010,6 +1011,9 @@ class Trainer(object):
 
                 accelerator.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                 pbar.set_description(f'loss: {total_loss:.4f}')
+                if self.step % 100 == 0:
+                    if self.wandb is not None:
+                        self.wandb.log({"train/total_loss": total_loss})
 
                 accelerator.wait_for_everyone()
 
@@ -1039,6 +1043,8 @@ class Trainer(object):
                         if self.calculate_fid:
                             fid_score = self.fid_scorer.fid_score()
                             accelerator.print(f'fid_score: {fid_score}')
+                            if self.wandb is not None:
+                                self.wandb.log({"train/fid_score": fid_score})
                         if self.save_best_and_latest_only:
                             if self.best_fid > fid_score:
                                 self.best_fid = fid_score

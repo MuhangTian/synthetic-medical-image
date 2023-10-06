@@ -1,0 +1,46 @@
+project: public-image-data
+name: public-1st
+entity: muhang-tian
+method: grid
+metric:
+  name: train/fid_score
+  goal: maximize
+parameters:
+  load_path: 
+    value: data/imgs/train
+  dim: 
+    value: 64
+  image_size: 
+    value: 128
+  timesteps:
+    value: 1000
+  sampling_timesteps: 
+    value: 250
+  objective:
+    values: [pred_noise, pred_v, pred_x0]
+  beta_schedule:
+    values: [sigmoid, linear, cosine]
+  channels: 
+    value: 3
+  resnet_block_groups:
+    value: 8
+  learned_sinusoidal_dim:
+    value: 16
+  attn_dim_head:
+    value: 32
+  attn_heads:
+    value: 1
+  batch_size:
+    value: 32
+  lr:
+    values: [0.00008, 0.0008]
+  num_steps:
+    value: 700000
+  gradient_accumulate_every:
+    value: 2
+  ema_decay: 
+    values: [0.995, 0.999]
+  save_and_sample_every:
+    value: 70000
+  num_fid_samples:
+    value: 5000
